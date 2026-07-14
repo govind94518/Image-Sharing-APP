@@ -293,11 +293,36 @@ export default function ImagingDashboard() {
   const dispatch = useDispatch();
   const filters = useSelector((state) => state.filters);
   const [openFilter, setOpenFilter] = useState(null);
-  const { data: session } = useGetSessionQuery();
-  const { data: result, isFetching, refetch } = useSearchStudiesQuery(filters);
+  const { data: session, isFetching: isSessionLoading, error: sessionError } = useGetSessionQuery();
+  const { data: result, isFetching, refetch } = useSearchStudiesQuery(filters, { skip: !session });
   const studies = result?.entries || [];
   const facets = result?.facets || { studies: [], procedures: [], specialties: [], sites: [], dates: [] };
   const noStudies = !isFetching && studies.length === 0;
+
+  if (isSessionLoading) {
+    return (
+      <main className="smart-launch-screen">
+        <section className="smart-launch-panel">
+          <span className="smart-launch-spinner" aria-hidden="true" />
+          <h1>Loading patient context</h1>
+          <p>Completing SMART authorization and reading the selected FHIR Patient.</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (sessionError) {
+    return (
+      <main className="smart-launch-screen">
+        <section className="smart-launch-panel smart-launch-error">
+          <span className="smart-launch-warning" aria-hidden="true">!</span>
+          <h1>Patient context could not be loaded</h1>
+          <p>{sessionError.data || "The SMART session could not be initialized."}</p>
+          <button type="button" onClick={() => window.location.assign(import.meta.env.BASE_URL)}>Open demo application</button>
+        </section>
+      </main>
+    );
+  }
 
   const openModal = (type, study) => {
     if (type === "viewer" && !study.viewerAvailable) {
@@ -310,8 +335,8 @@ export default function ImagingDashboard() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div className="brand"><span className="brand-mark">I</span><span><strong>OHIN Image Sharing</strong><small>SMART App <span>•</span> CDeX FHIR Proxy</small></span></div>
-        <div className="connection-meta"><span>FHIR Proxy: cell1.query.cdexhub…</span><strong>Practitioner: {session?.practitioner.display || "Loading…"}</strong></div>
+        <div className="brand"><span className="brand-mark">I</span><span><strong>Image Sharing App</strong><small>SMART App <span>•</span> CDeX FHIR Proxy</small></span></div>
+        <div className="connection-meta"><span title={session?.serverUrl || "Mock CDeX adapter"}>FHIR Server: {session?.serverUrl || "Mock CDeX adapter"}</span><strong>Practitioner: {session?.practitioner?.display || "Authenticated user"}</strong></div>
       </header>
 
       <div className="workspace">
@@ -319,7 +344,7 @@ export default function ImagingDashboard() {
           <div><h1>{session?.patient.name || "Loading patient…"}</h1>
             <div className="patient-facts"><span>DOB: {session?.patient.birthDate || "—"}</span><span>MRN: {session?.patient.mrn || "—"}</span><span>Patient: {session?.patient.id || "—"}</span><span>Encounter: {session?.encounter?.id?.replace("Encounter/", "") || "—"}</span></div>
           </div>
-          <div className="validated-badge">SMART launch context validated</div>
+          <div className={`validated-badge${session?.smartContextValidated ? "" : " demo-badge"}`}>{session?.smartContextValidated ? "SMART launch context validated" : "Demo session"}</div>
         </section>
 
         <section className="discovery-panel">

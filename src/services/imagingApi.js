@@ -1,5 +1,6 @@
 import { createApi, fakeBaseQuery } from "@reduxjs/toolkit/query/react";
 import { mockCdexClient } from "./mockCdexApi";
+import { getSmartLaunchPhase, getSmartSession } from "./smartClient";
 
 const safeQuery = (request) => async () => {
   try {
@@ -20,7 +21,11 @@ export const imagingApi = createApi({
   tagTypes: ["Studies"],
   endpoints: (builder) => ({
     getSession: builder.query({
-      queryFn: safeQuery(() => mockCdexClient.getSession()),
+      queryFn: safeQuery(() =>
+        getSmartLaunchPhase() === "callback"
+          ? getSmartSession()
+          : mockCdexClient.getSession(),
+      ),
     }),
     searchStudies: builder.query({
       queryFn: (filters) => safeQuery(() => mockCdexClient.searchStudies(filters))(),

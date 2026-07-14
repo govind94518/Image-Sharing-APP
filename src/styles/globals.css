@@ -638,3 +638,78 @@ td:nth-child(7), td:nth-child(8), td:nth-child(9), td:nth-child(10) { text-align
   .modal-launch .launch-icon { width: 62px; height: 62px; }
   .modal-launch .modal-actions { margin-top: 32px; }
 }
+
+.smart-launch-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #f4f7fa;
+}
+
+.smart-launch-panel {
+  width: min(520px, 100%);
+  padding: 42px;
+  border: 1px solid #ced8e3;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 14px 38px rgba(18, 43, 70, 0.1);
+  text-align: center;
+}
+
+.smart-launch-panel h1 {
+  margin: 20px 0 10px;
+  color: #10264c;
+  font-size: 26px;
+  letter-spacing: 0;
+}
+
+.smart-launch-panel p {
+  margin: 0;
+  color: #60738a;
+  line-height: 1.6;
+}
+
+.smart-launch-panel button {
+  min-height: 42px;
+  margin-top: 24px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 5px;
+  color: #fff;
+  background: #0758cf;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.smart-launch-spinner,
+.smart-launch-warning {
+  width: 48px;
+  height: 48px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.smart-launch-spinner {
+  border: 4px solid #d8e4f1;
+  border-top-color: #0758cf;
+  animation: smart-spin 0.85s linear infinite;
+}
+
+.smart-launch-warning {
+  color: #fff;
+  background: #b42318;
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.demo-badge {
+  color: #624b00;
+  border-color: #efd887;
+  background: #fff8dc;
+}
+
+@keyframes smart-spin {
+  to { transform: rotate(360deg); }
+}

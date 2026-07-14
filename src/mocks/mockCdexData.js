@@ -1,6 +1,8 @@
 export const mockSession = {
   status: "authenticated",
+  mode: "demo",
   environment: "Mock CDeX",
+  serverUrl: null,
   practitioner: {
     id: "Practitioner/prac-1001",
     display: "Dr. Smith",
@@ -18,7 +20,7 @@ export const mockSession = {
     id: "Encounter/ENC-123",
     display: "Outpatient encounter",
   },
-  smartContextValidated: true,
+  smartContextValidated: false,
   correlationId: "7fd9f7ef-66d2-4fd3-9f14-c66d0170a681",
 };
 

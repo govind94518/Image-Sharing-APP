@@ -1,8 +1,9 @@
-# Image Sharing APP
+# Image Sharing App
 
-A static Vite React + Redux prototype for OHIN imaging discovery. It simulates
-SMART launch context, CDeX imaging searches, diagnostic reports, and controlled
-viewer sessions without contacting clinical systems.
+A static Vite React + Redux prototype for OHIN imaging discovery. It implements
+Oracle Health SMART on FHIR authorization and uses the authenticated Patient,
+Encounter, practitioner, and FHIR server context. Imaging results, reports, and
+viewer sessions remain mocked for the POC.
 
 ## Prerequisites
 
@@ -24,14 +25,26 @@ Open the local URL printed by Vite after starting the development server.
 - Redux Toolkit state for study filters and modal state
 - RTK Query endpoints backed by a local mock CDeX adapter
 - Patient context, modality/specialty/site filters, and external-source toggle
+- Oracle Health EHR launch using `iss` and `launch`
+- OAuth callback processing through `FHIR.oauth2.ready()`
 - Mock DiagnosticReport, thumbnail, and secure viewer-session flows
 - Responsive desktop and mobile layouts
 
 ## Important
 
-All data and sessions are mocked. The prototype does not implement production
-SMART authorization, CDeX credentials, repository secrets, PHI safeguards, or
-auditing. Those belong in the production proxy/security boundary.
+SMART authorization and patient context are real when the app is launched from
+the Oracle Health sandbox. Imaging records and viewer sessions are mocked. CDeX
+credentials, repository secrets, PHI safeguards, and auditing still belong in
+the production proxy/security boundary.
+
+The registered Oracle Health redirect and launch URI is:
+
+```text
+https://govind94518.github.io/Image-Sharing-APP/index.html
+```
+
+The production client ID defaults to the public client registered for this app.
+It can be overridden at build time with `VITE_SMART_CLIENT_ID`.
 
 ## Useful Commands
 
