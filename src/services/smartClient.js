@@ -7,7 +7,8 @@ const EHR_LAUNCH_SCOPES = [
   "patient/Patient.read",
   "patient/Encounter.read",
   "patient/DiagnosticReport.read",
-  "patient/ImagingStudy.read",
+  "patient/ServiceRequest.read",
+  "patient/Binary.read",
 ].join(" ");
 
 const STANDALONE_SCOPES = [
@@ -18,7 +19,8 @@ const STANDALONE_SCOPES = [
   "patient/Patient.read",
   "patient/Encounter.read",
   "patient/DiagnosticReport.read",
-  "patient/ImagingStudy.read",
+  "patient/ServiceRequest.read",
+  "patient/Binary.read",
 ].join(" ");
 
 let authorizationPromise;
@@ -31,16 +33,33 @@ const getFhir = () => {
   return window.FHIR;
 };
 
-const getRedirectUri = () =>
-  new URL(`${import.meta.env.BASE_URL}index.html`, window.location.origin).toString();
+const getRedirectUri = () => {
+  const configuredRedirectUri = import.meta.env.VITE_SMART_REDIRECT_URI?.trim();
+  if (configuredRedirectUri) return configuredRedirectUri;
+
+  // Preserve the launch path that was registered with the EHR. This supports
+  // both /index.html and /launch registrations on GitHub Pages.
+  const redirectUri = new URL(window.location.href);
+  redirectUri.search = "";
+  redirectUri.hash = "";
+  return redirectUri.toString();
+};
 
 const getClientId = () =>
   import.meta.env.VITE_SMART_CLIENT_ID?.trim() || DEFAULT_CLIENT_ID;
 
+const getSmartScope = () => {
+  const configuredScope = import.meta.env.VITE_SMART_SCOPE?.trim();
+  if (configuredScope) return configuredScope;
+
+  const params = new window.URLSearchParams(window.location.search);
+  return params.has("launch") ? EHR_LAUNCH_SCOPES : STANDALONE_SCOPES;
+};
+
 export const getSmartLaunchPhase = (search = window.location.search) => {
   const params = new window.URLSearchParams(search);
   if (params.has("error")) return "error";
-  if (params.has("code") && params.has("state")) return "callback";
+  if (params.has("code") || params.has("state")) return "callback";
   if (params.has("iss")) return "launch";
   return "demo";
 };
@@ -65,7 +84,7 @@ export const beginSmartAuthorization = () => {
   authorizationPromise = Promise.resolve(
     getFhir().oauth2.authorize({
       clientId: getClientId(),
-      scope: params.has("launch") ? EHR_LAUNCH_SCOPES : STANDALONE_SCOPES,
+      scope: getSmartScope(),
       redirectUri: getRedirectUri(),
     }),
   );
@@ -114,13 +133,38 @@ const readPractitioner = async (client) => {
   };
 };
 
+const normalizeResourceId = (value, resourceType) =>
+  String(value || "").replace(new RegExp(`^${resourceType}/`), "").split("?")[0];
+
+const readPatient = async (client) => {
+  if (client.patient?.id && typeof client.patient.read === "function") {
+    return client.patient.read();
+  }
+
+  const tokenPatientId = client.state?.tokenResponse?.patient || client.patient?.id;
+  if (tokenPatientId) {
+    const patientId = normalizeResourceId(tokenPatientId, "Patient");
+    return client.request(`/Patient/${encodeURIComponent(patientId)}`);
+  }
+
+  // Some SMART servers return patient context only in the access token and do
+  // not populate client.patient. The reference app falls back to one Patient
+  // search so those launches can still be completed.
+  const bundle = await client.request("/Patient?_count=1");
+  const entry = bundle?.entry?.find((item) => item.resource?.resourceType === "Patient");
+  if (!entry?.resource) {
+    throw new Error("The EHR did not return a Patient resource in the SMART context.");
+  }
+  return entry.resource;
+};
+
 export const getSmartSession = async () => {
   if (!clientPromise) clientPromise = getFhir().oauth2.ready();
   const client = await clientPromise;
-  const patient = await client.patient.read();
+  const patient = await readPatient(client);
   const practitioner = await readPractitioner(client);
   const mrn = findMrn(patient);
-  const patientId = patient.id || client.patient?.id;
+  const patientId = patient.id || normalizeResourceId(client.state?.tokenResponse?.patient || client.patient?.id, "Patient");
   const encounterId = client.encounter?.id || client.state?.tokenResponse?.encounter;
 
   if (!patientId) {
