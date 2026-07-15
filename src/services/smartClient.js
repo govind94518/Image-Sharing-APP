@@ -1,4 +1,5 @@
 const DEFAULT_CLIENT_ID = "42cc2858-be27-4cd4-98c8-3f3cb8cbcc08";
+const SMART_CLIENT_SECRET = "Ou9_WuHhmF24ll4GvtLZ24XNm0T99dlg";
 
 const EHR_LAUNCH_SCOPES = [
   "launch",
