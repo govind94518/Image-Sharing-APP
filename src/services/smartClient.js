@@ -1,4 +1,4 @@
-const DEFAULT_CLIENT_ID = "9bc9f7d6-42de-4315-ab9e-443f21de13ee";
+const DEFAULT_CLIENT_ID = "42cc2858-be27-4cd4-98c8-3f3cb8cbcc08";
 
 const EHR_LAUNCH_SCOPES = [
   "launch",
