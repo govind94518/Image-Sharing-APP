@@ -3,6 +3,7 @@ import ImagingDashboard from "./ImagingDashboard";
 import {
   beginSmartAuthorization,
   getSmartAuthorizationError,
+  getSmartAuthorizationErrorTitle,
   getSmartLaunchPhase,
 } from "../services/smartClient";
 
@@ -40,7 +41,7 @@ export default function SmartLaunchGate() {
     return (
       <LaunchStatus
         error
-        title="SMART authorization failed"
+        title={getSmartAuthorizationErrorTitle()}
         message={getSmartAuthorizationError()}
       />
     );

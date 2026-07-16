@@ -22,7 +22,7 @@ export const imagingApi = createApi({
   endpoints: (builder) => ({
     getSession: builder.query({
       queryFn: safeQuery(() =>
-        getSmartLaunchPhase() === "callback"
+        getSmartLaunchPhase() === "connected"
           ? getSmartSession()
           : mockCdexClient.getSession(),
       ),

@@ -1,201 +1,100 @@
-const DEFAULT_CLIENT_ID = "42cc2858-be27-4cd4-98c8-3f3cb8cbcc08";
-const SMART_CLIENT_SECRET = "Ou9_WuHhmF24ll4GvtLZ24XNm0T99dlg";
+const DEFAULT_LOCAL_BFF_URL = "http://localhost:8084";
 
-const EHR_LAUNCH_SCOPES = [
-  "launch",
-  "openid",
-  "fhirUser",
-  "patient/Patient.read",
-  "patient/Encounter.read",
-  "patient/DiagnosticReport.read",
-  "patient/ServiceRequest.read",
-  "patient/Binary.read",
-].join(" ");
+const normalizeBaseUrl = (value) => value.replace(/\/+$/, "");
 
-const STANDALONE_SCOPES = [
-  "launch/patient",
-  "online_access",
-  "openid",
-  "profile",
-  "patient/Patient.read",
-  "patient/Encounter.read",
-  "patient/DiagnosticReport.read",
-  "patient/ServiceRequest.read",
-  "patient/Binary.read",
-].join(" ");
+export const getSmartBffUrl = () => {
+  const configuredUrl = import.meta.env.VITE_SMART_BFF_URL?.trim();
+  if (configuredUrl) return normalizeBaseUrl(configuredUrl);
 
-let authorizationPromise;
-let clientPromise;
+  // The local BFF is deliberately the only development default. A deployed
+  // static UI must be built with the URL of its deployed BFF.
+  return import.meta.env.DEV ? DEFAULT_LOCAL_BFF_URL : "";
+};
 
-const getFhir = () => {
-  if (!window.FHIR?.oauth2) {
-    throw new Error("The SMART on FHIR client library did not load.");
+const buildBffUrl = (path) => {
+  const baseUrl = getSmartBffUrl();
+  if (!baseUrl) {
+    throw new Error(
+      "The SMART BFF URL is not configured. Set VITE_SMART_BFF_URL when building the deployed UI.",
+    );
   }
-  return window.FHIR;
-};
-
-const getRedirectUri = () => {
-  const configuredRedirectUri = import.meta.env.VITE_SMART_REDIRECT_URI?.trim();
-  if (configuredRedirectUri) return configuredRedirectUri;
-
-  // Preserve the launch path that was registered with the EHR. This supports
-  // both /index.html and /launch registrations on GitHub Pages.
-  const redirectUri = new URL(window.location.href);
-  redirectUri.search = "";
-  redirectUri.hash = "";
-  return redirectUri.toString();
-};
-
-const getClientId = () =>
-  import.meta.env.VITE_SMART_CLIENT_ID?.trim() || DEFAULT_CLIENT_ID;
-
-const getSmartScope = () => {
-  const configuredScope = import.meta.env.VITE_SMART_SCOPE?.trim();
-  if (configuredScope) return configuredScope;
-
-  const params = new window.URLSearchParams(window.location.search);
-  return params.has("launch") ? EHR_LAUNCH_SCOPES : STANDALONE_SCOPES;
+  return `${baseUrl}${path}`;
 };
 
 export const getSmartLaunchPhase = (search = window.location.search) => {
   const params = new window.URLSearchParams(search);
-  if (params.has("error")) return "error";
-  if (params.has("code") || params.has("state")) return "callback";
-  if (params.has("iss")) return "launch";
+  if (params.has("smart_error") || params.has("error")) return "error";
+
+  // A callback at the React app means the Oracle registration still points to
+  // the UI instead of the BFF callback endpoint. The BFF must receive code.
+  if (params.has("code") || params.has("state")) return "error";
+  if (params.get("smart") === "connected") return "connected";
+  if (params.has("iss") && params.has("launch")) return "launch";
+  if (params.has("iss")) return "error";
   return "demo";
+};
+
+const errorMessages = {
+  authorization_denied: "The authorization request was cancelled or denied by the EHR.",
+  bff_not_configured: "The local SMART BFF is missing its client configuration.",
+  ehr_connection_failed: "The SMART BFF could not reach the EHR authorization service.",
+  expired_launch: "The SMART launch expired. Launch the app again from the EHR.",
+  invalid_issuer: "The EHR issuer is not allowed by the SMART BFF configuration.",
+  invalid_launch: "The SMART launch context is incomplete. It must include iss and launch.",
+  missing_patient_context: "The EHR did not provide a selected patient context for this launch.",
+  patient_access_forbidden:
+    "Oracle Health denied the Patient read. Confirm Patient Read API access and the granted user/Patient.read scope, then launch again.",
+  patient_not_found:
+    "SMART authorization succeeded, but Oracle Test Sandbox returned a patient ID that does not exist on its FHIR server. Launch with a valid patient from a working Millennium sandbox or domain.",
+  patient_context_failed: "The BFF could not load the selected patient from the EHR.",
+  smart_discovery_failed: "The EHR did not provide SMART authorization endpoint metadata.",
+  token_exchange_failed: "The authorization server rejected the authorization code.",
 };
 
 export const getSmartAuthorizationError = (search = window.location.search) => {
   const params = new window.URLSearchParams(search);
-  return (
-    params.get("error_description") ||
-    params.get("error") ||
-    "The SMART authorization server returned an error."
-  );
+  if (params.has("code") || params.has("state")) {
+    return "The OAuth callback reached the React UI. Register the BFF callback URL in Oracle Health, then launch again.";
+  }
+
+  const errorCode = params.get("smart_error") || params.get("error");
+  return errorMessages[errorCode] || "The SMART authorization server returned an error.";
+};
+
+export const getSmartAuthorizationErrorTitle = (search = window.location.search) => {
+  const errorCode = new window.URLSearchParams(search).get("smart_error");
+  if (errorCode === "patient_not_found") return "Sandbox patient data unavailable";
+  if (errorCode === "patient_access_forbidden") return "Patient access denied";
+  return "SMART authorization failed";
 };
 
 export const beginSmartAuthorization = () => {
-  if (authorizationPromise) return authorizationPromise;
-
   const params = new window.URLSearchParams(window.location.search);
-  if (!params.has("iss")) {
-    throw new Error("The SMART launch URL is missing the iss parameter.");
+  const iss = params.get("iss");
+  const launch = params.get("launch");
+  if (!iss || !launch) {
+    throw new Error("The SMART launch URL must contain both iss and launch parameters.");
   }
 
-  authorizationPromise = Promise.resolve(
-    getFhir().oauth2.authorize({
-      clientId: getClientId(),
-      scope: getSmartScope(),
-      redirectUri: getRedirectUri(),
-    }),
-  );
-
-  return authorizationPromise;
-};
-
-const formatHumanName = (resource, fallback) => {
-  const name = resource?.name?.find((item) => item.use === "official") || resource?.name?.[0];
-  if (!name) return fallback;
-  if (name.text) return name.text;
-
-  const parts = [
-    ...(name.prefix || []),
-    ...(name.given || []),
-    name.family,
-  ].filter(Boolean);
-  return parts.join(" ") || fallback;
-};
-
-const findMrn = (patient) => {
-  const identifiers = patient?.identifier || [];
-  const mrn = identifiers.find((identifier) =>
-    identifier.type?.coding?.some((coding) => coding.code === "MR"),
-  );
-  return mrn || identifiers.find((identifier) => identifier.use === "official") || identifiers[0];
-};
-
-const readPractitioner = async (client) => {
-  try {
-    if (typeof client.user?.read === "function") {
-      const resource = await client.user.read();
-      return {
-        id: `${resource.resourceType}/${resource.id}`,
-        display: formatHumanName(resource, "Authenticated user"),
-      };
-    }
-  } catch {
-    // Some EHR sandboxes grant patient context without allowing a user read.
-  }
-
-  const fhirUser = client.state?.tokenResponse?.fhirUser;
-  return {
-    id: fhirUser || "SMART user",
-    display: fhirUser?.split("/").pop() || "Authenticated user",
-  };
-};
-
-const normalizeResourceId = (value, resourceType) =>
-  String(value || "").replace(new RegExp(`^${resourceType}/`), "").split("?")[0];
-
-const readPatient = async (client) => {
-  if (client.patient?.id && typeof client.patient.read === "function") {
-    return client.patient.read();
-  }
-
-  const tokenPatientId = client.state?.tokenResponse?.patient || client.patient?.id;
-  if (tokenPatientId) {
-    const patientId = normalizeResourceId(tokenPatientId, "Patient");
-    return client.request(`/Patient/${encodeURIComponent(patientId)}`);
-  }
-
-  // Some SMART servers return patient context only in the access token and do
-  // not populate client.patient. The reference app falls back to one Patient
-  // search so those launches can still be completed.
-  const bundle = await client.request("/Patient?_count=1");
-  const entry = bundle?.entry?.find((item) => item.resource?.resourceType === "Patient");
-  if (!entry?.resource) {
-    throw new Error("The EHR did not return a Patient resource in the SMART context.");
-  }
-  return entry.resource;
+  const launchUrl = new window.URL(buildBffUrl("/smart/launch"));
+  launchUrl.searchParams.set("iss", iss);
+  launchUrl.searchParams.set("launch", launch);
+  window.location.assign(launchUrl.toString());
+  return Promise.resolve();
 };
 
 export const getSmartSession = async () => {
-  if (!clientPromise) clientPromise = getFhir().oauth2.ready();
-  const client = await clientPromise;
-  const patient = await readPatient(client);
-  const practitioner = await readPractitioner(client);
-  const mrn = findMrn(patient);
-  const patientId = patient.id || normalizeResourceId(client.state?.tokenResponse?.patient || client.patient?.id, "Patient");
-  const encounterId = client.encounter?.id || client.state?.tokenResponse?.encounter;
+  const response = await window.fetch(buildBffUrl("/api/session"), {
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
 
-  if (!patientId) {
-    throw new Error("The EHR did not include a patient in the SMART launch context.");
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error("The local SMART session has expired. Launch the app again from the EHR.");
+    }
+    throw new Error("The SMART BFF could not load the authenticated session.");
   }
 
-  return {
-    status: "authenticated",
-    mode: "smart",
-    environment: "Oracle Health SMART",
-    serverUrl: client.state?.serverUrl || new window.URLSearchParams(window.location.search).get("iss"),
-    practitioner,
-    patient: {
-      id: patientId,
-      fhirReference: `Patient/${patientId}`,
-      ehrReference: `Patient/${patientId}`,
-      name: formatHumanName(patient, "Unknown patient"),
-      birthDate: patient.birthDate,
-      mrn: mrn?.value,
-      identifierSystem: mrn?.system,
-    },
-    encounter: {
-      id: encounterId ? `Encounter/${String(encounterId).replace(/^Encounter\//, "")}` : undefined,
-      display: encounterId ? "SMART launch encounter" : "No encounter in launch context",
-    },
-    smartContextValidated: true,
-  };
-};
-
-export const smartConfiguration = {
-  clientId: getClientId(),
-  redirectUri: getRedirectUri(),
+  return response.json();
 };

@@ -1,78 +1,64 @@
 # Image Sharing App
 
-A static Vite React + Redux prototype for OHIN imaging discovery. It implements
-Oracle Health SMART on FHIR authorization and uses the authenticated Patient,
-Encounter, practitioner, and FHIR server context. Imaging results, reports, and
-viewer sessions remain mocked for the POC.
+A Vite React + Redux prototype for Image Sharing radiology discovery. The UI is
+static, while the local SMART BFF owns confidential Oracle Health OAuth.
 
-## Prerequisites
+## Local development
 
-- Node.js `>=22.13.0`
+Start the BFF first from:
 
-## Quick Start
+```text
+../image-sharing-smart-bff
+```
+
+Then run the UI:
 
 ```bash
 npm install
 npm run dev
-npm run build
 ```
 
-Open the local URL printed by Vite after starting the development server.
+The UI runs at `http://localhost:5173` and contacts the BFF at
+`http://localhost:8084`. Override the BFF URL with `VITE_SMART_BFF_URL` in a
+local `.env` file when needed.
 
-## Prototype scope
+## SMART flow
 
-- JavaScript React components under `src/`
-- Redux Toolkit state for study filters and modal state
-- RTK Query endpoints backed by a local mock CDeX adapter
-- Patient context, modality/specialty/site filters, and external-source toggle
-- Oracle Health EHR launch using `iss` and `launch`
-- OAuth callback processing through `FHIR.oauth2.ready()`
-- Provider launch scopes for Patient, Encounter, DiagnosticReport, ServiceRequest, and Binary resources
-- Mock DiagnosticReport, thumbnail, and secure viewer-session flows
-- Responsive desktop and mobile layouts
+1. Oracle Health launches the React UI with `iss` and `launch`.
+2. The UI navigates to the BFF at `/smart/launch`.
+3. The BFF discovers the EHR endpoints, creates PKCE state, and redirects the browser to Oracle Health.
+4. Oracle Health redirects to the BFF callback, not to React.
+5. The BFF exchanges the authorization code using its server-side client secret and sets an `HttpOnly` session cookie.
+6. React calls `GET /api/session` with credentials and receives safe patient context only.
 
-## Important
+The browser never receives the client secret or OAuth access token.
 
-SMART authorization and patient context are real when the app is launched from
-the Oracle Health sandbox. Imaging records and viewer sessions are mocked. CDeX
-credentials, repository secrets, PHI safeguards, and auditing still belong in
-the production proxy/security boundary.
-
-The registered Oracle Health redirect and launch URI is:
+## Oracle registration for local testing
 
 ```text
-https://govind94518.github.io/Image-Sharing-APP/index.html
+SMART Launch URI: http://localhost:8084/launch
+Redirect URI:      http://localhost:8084/smart/callback
 ```
 
-The production client ID defaults to the public client registered for this app.
-It can be overridden at build time with `VITE_SMART_CLIENT_ID`.
-The complete requested scope can be overridden with `VITE_SMART_SCOPE` when an
-EHR registration uses a provider-specific scope set.
-The redirect URI can be overridden with `VITE_SMART_REDIRECT_URI`; otherwise the
-app preserves the path used by the SMART launcher, including `index.html`.
+Both values must exactly match the Oracle Health application registration.
 
-## Useful Commands
+## Commands
 
-- `npm run dev`: start local development
-- `npm run build`: create the static GitHub Pages build in `dist/`
-- `npm run preview`: preview the static production build locally
-- `npm run lint`: run ESLint
+- `npm run dev`: local Vite server
+- `npm run build`: production static build in `dist/`
+- `npm run preview`: local preview of the production build
+- `npm run lint`: ESLint validation
 
-## GitHub Pages
+## Deployment
 
-This app is configured for the repository:
-
-```text
-govind94518/Image-Sharing-APP
-```
-
-The GitHub Pages URL will be:
+The current GitHub Pages POC is available at:
 
 ```text
 https://govind94518.github.io/Image-Sharing-APP/
 ```
 
-The Vite `base` path is set to `/Image-Sharing-APP/` in `vite.config.js`.
-The build also creates static fallbacks for `/launch` and unknown GitHub Pages
-routes so SMART launch query parameters are preserved when the launcher uses a
-route instead of `index.html`.
+The Pages workflow builds the UI with `VITE_SMART_BFF_URL=http://localhost:8084`.
+This hybrid setup works only in a browser on the same computer where the BFF is
+running. The confidential client secret remains in the ignored BFF `.env` and
+is never included in the static UI. For shared or production use, deploy the BFF
+over HTTPS and replace the build variable with that public BFF URL.
