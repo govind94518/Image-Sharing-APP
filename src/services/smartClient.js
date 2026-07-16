@@ -1,4 +1,5 @@
 const DEFAULT_LOCAL_BFF_URL = "http://localhost:8084";
+const BFF_SESSION_STORAGE_KEY = "image_sharing_bff_session";
 
 const normalizeBaseUrl = (value) => value.replace(/\/+$/, "");
 
@@ -21,14 +22,23 @@ const buildBffUrl = (path) => {
   return `${baseUrl}${path}`;
 };
 
-export const getSmartLaunchPhase = (search = window.location.search) => {
+const getHashParams = (hash = window.location.hash) =>
+  new window.URLSearchParams(hash.replace(/^#/, ""));
+
+export const getSmartLaunchPhase = (
+  search = window.location.search,
+  hash = window.location.hash,
+) => {
   const params = new window.URLSearchParams(search);
+  const hashParams = getHashParams(hash);
   if (params.has("smart_error") || params.has("error")) return "error";
 
   // A callback at the React app means the Oracle registration still points to
   // the UI instead of the BFF callback endpoint. The BFF must receive code.
   if (params.has("code") || params.has("state")) return "error";
-  if (params.get("smart") === "connected") return "connected";
+  if (params.get("smart") === "connected" || hashParams.get("smart") === "connected") {
+    return "connected";
+  }
   if (params.has("iss") && params.has("launch")) return "launch";
   if (params.has("iss")) return "error";
   return "demo";
@@ -83,14 +93,35 @@ export const beginSmartAuthorization = () => {
   return Promise.resolve();
 };
 
+const getBffSessionToken = () => {
+  const hashParams = getHashParams();
+  const handoffToken = hashParams.get("bff_session")?.trim();
+  if (handoffToken) {
+    window.sessionStorage.setItem(BFF_SESSION_STORAGE_KEY, handoffToken);
+
+    const cleanUrl = new window.URL(window.location.href);
+    cleanUrl.hash = "";
+    cleanUrl.searchParams.set("smart", "connected");
+    window.history.replaceState({}, "", cleanUrl);
+    return handoffToken;
+  }
+
+  return window.sessionStorage.getItem(BFF_SESSION_STORAGE_KEY)?.trim() || "";
+};
+
 export const getSmartSession = async () => {
+  const sessionToken = getBffSessionToken();
   const response = await window.fetch(buildBffUrl("/api/session"), {
-    credentials: "include",
-    headers: { Accept: "application/json" },
+    credentials: sessionToken ? "omit" : "include",
+    headers: {
+      Accept: "application/json",
+      ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+    },
   });
 
   if (!response.ok) {
     if (response.status === 401) {
+      window.sessionStorage.removeItem(BFF_SESSION_STORAGE_KEY);
       throw new Error("The local SMART session has expired. Launch the app again from the EHR.");
     }
     throw new Error("The SMART BFF could not load the authenticated session.");
