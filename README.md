@@ -22,6 +22,33 @@ The UI runs at `http://localhost:5173` and contacts the BFF at
 `http://localhost:8084`. Override the BFF URL with `VITE_SMART_BFF_URL` in a
 local `.env` file when needed.
 
+## Run everything with Docker
+
+Keep `image-sharing-ui` and `image-sharing-smart-bff` next to each other in the
+same parent directory. Configure the BFF once:
+
+```bash
+cp ../image-sharing-smart-bff/.env.example ../image-sharing-smart-bff/.env
+# Add the SMART client ID and secret to the ignored BFF .env file.
+```
+
+Then build and start both containers with one command from this directory:
+
+```bash
+docker compose up --build
+```
+
+Open `http://localhost:5173`. The BFF health endpoint is available at
+`http://localhost:8084/health`. Stop both containers with:
+
+```bash
+docker compose down
+```
+
+Compose overrides the BFF's browser-facing settings for this local stack. The
+SMART launch and redirect URLs remain `http://localhost:8084/launch` and
+`http://localhost:8084/smart/callback`.
+
 ## SMART flow
 
 1. Oracle Health launches the React UI with `iss` and `launch`.
